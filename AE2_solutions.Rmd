@@ -1,0 +1,190 @@
+---
+title: "Simulation & Models"
+output: learnr::tutorial
+runtime: shiny_prerendered
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(learnr)
+library(tidyverse)
+library(patchwork) # For arranging plots
+options(digits = 3)
+
+gradebook2 <- read.csv("https://raw.githubusercontent.com/sta238/data/main/gradebook2.csv")
+```
+
+## Limit theorems
+
+On a test, each question could be considered as an *observation* of a student's mastery of the material. Say you had been studying and felt confident in about $70\%$ of the course material so assume you have a $0.70$ probability of getting each question correct. Assume no part marks are given. 
+```{r distribution_qs, echo=FALSE}
+question("What is the distribution of the outcome of each question?",
+  answer("Bernoulli", correct = TRUE),
+  answer("Normal"),
+  answer("Binomial", message = "Not incorrect and `rbinom` is used, but another option is more precise"),
+  answer("Poisson"),
+  allow_retry = TRUE,
+  random_answer_order = TRUE,
+  incorrect = "Try again",
+  try_again = "Try again"
+)
+```
+
+Consider a test with $n$ questions. Test scores are generally calculate by looking at the percentage of marks over all questions. Ideally, your test score reflects your mastery of the material. Using example code in Chapter 3 of the Supplemental text, plot a running average for a test score as the number of questions increases. Use a value of $n$ that is large enough so that you feel confident that you would get a score that reflects your mastery. Ensure that your plot is labelled appropriately. Try running your code more than once and notice how the values change with each realization of the test results. *Bonus*: Plot two or more realizations on the same plot.
+```{r LLN, exercise=TRUE}
+set.seed(2023) # ensure this is included in every code block where sampling is used
+n <- 500
+p <- 0.7
+
+sim_questions <- function(n_observations, prob_of_success){
+  rbinom(n = n_observations, size = 1, prob = prob_of_success)
+}
+
+runningaverage <- cumsum(sim_questions(n,p)) / 1:length(sim_questions(n,p))
+
+df <- tibble(x = 1:length(runningaverage), y = runningaverage)
+
+df %>%
+  ggplot(aes(x = x, y = y)) +
+  theme_classic() +
+  geom_point(shape = 20, size = 0.2) +
+  geom_hline(yintercept = p,colour = "red",linewidth = .5,linetype = "dotted") +
+  labs(title = "Running test average",
+       x = "Number of questions",
+       y = "Test score",
+       color = "Realization")
+
+
+# # Bonus: plot 4 more realizations of the running average test score
+# colnames(df) <- c("x", "y1")
+# N <- 4
+# for (i in 1:N) {
+#   df[ , paste0("y", i+1)] <- cumsum(sim_questions(n,p)) / 1:length(sim_questions(n,p))
+# }
+# 
+# df %>%
+#   pivot_longer(cols = -x, names_to = "real_num", values_to = "y") %>%
+#   ggplot(aes(x = x, y = y)) +
+#   theme_classic() +
+#   geom_point(aes(color = real_num), shape = 20, size = 0.2) +
+#   geom_hline(yintercept = p,colour = "black",linewidth = .5,linetype = "dotted") +
+#   labs(title = "Running test average",
+#        x = "Number of questions",
+#        y = "Test score",
+#        color = "Realization")
+```
+
+
+Consider a test that has 50 questions, but otherwise follows the model described above. 
+```{r distribution_tests, echo=FALSE}
+question("What distribution do the test scores follow?",
+  answer("Bernoulli"),
+  answer("Normal", message = "Sometimes, but another answer that is always true"),
+  answer("Binomial", correct = TRUE),
+  answer("Poisson"),
+  allow_retry = TRUE,
+  random_answer_order = TRUE,
+  incorrect = "Try again",
+  try_again = "Try again"
+)
+```
+
+If you took a test with 50 questions $N$ times, what is the distribution of the average test scores? From CLT, we expect the distribution to converge to the Normal distribution as $N \rightarrow \infty$. Choose a suitably large value of $N$ and generate $N$ test scores. Scale the test scores to align to the standard normal distribution, and plot the scores. Include a layer that shows the standard normal distribution and a layer that gives a vertical line at your sample average. Try making adjustments to options to make the plot easier to read (for ideas, see Supplemental text or try seeing what other resources on data visualization with 'ggplot' suggest).
+```{r CLT, exercise=TRUE}
+set.seed(2023)
+N <- 1000
+n <- 50
+p <- 0.7
+
+# simulate N test scores
+test_score <- rbinom(n = N, size = n, prob = p) / n # divide by n to get the score as a proportional of possible marks
+
+# # alternative: sum over the outcome of n Bernoulli trials, repeating N times
+# sim_questions <- function(n_observations, prob_of_success){
+#   rbinom(n = n_observations, size = 1, prob = prob_of_success)
+# } # function simulating the results of each questions
+# 
+# test_score <- numeric(N)
+# for (i in 1:N) {
+#   sim <- sim_questions(n, p) # simulate the results for each question on a test
+#   test_score[i] <- sum(sim_questions(n,p)) / n # sum correct answers and divide by number of questions to get test score
+# }
+
+
+# calculate "true" values of mean and variance for a test score
+mu <- p # expected value of the distribution of a test score
+sigmasq <- p * (1-p) / n # variance of the distribution of a test score
+
+# scale the realized test scores to correspond to standard normal
+z <- (test_score - mu) / sqrt(sigmasq)
+
+# calculate sample mean & standard deviation
+muhat <- mean(z) 
+sigmahat <- sd(z)
+
+# plot
+b <- (24*sqrt(pi))^(1/3) * sigmahat * (N^(-1/3))
+tibble(x = z) %>%
+  ggplot(aes(x = x)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = b, colour="black", fill="grey", alpha = 0.3) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = 1), colour = "blue") + # layer with standard normal distribution
+  geom_vline(xintercept = muhat, colour = "red")
+```
+
+
+## Models
+
+The data for this part of the exercise is named `gradebook2`. It represents student marks* (*marks have been simulated), including the exam marks seen last week along with 4 other tests written by the same group of students. 
+Preview the data (do not print it all out). 
+```{r preview_data, exercise=TRUE}
+glimpse(gradebook2)
+```
+
+Get a 5-number summary of the exam and all the tests in `gradebook2`.
+```{r summarize, exercise=TRUE}
+gradebook2 %>%
+  select(-ids) %>%
+  summary()
+```
+
+Plot KDEs for all the evaluations in `gradebook2`. (*Hint*: The `pivot_longer` function used in AE1 may be helpful.) Arrange the plots side-by-side. Examples of this kind of layout in the Supplemental notes use the `patchwork` library, however, another option is a `facet_grid()` layer within `ggplot`.
+```{r plot, exercise=TRUE}
+tests_long <- gradebook2 %>% select(-ids) %>%
+  pivot_longer(cols = exam:T4,
+               names_to = "test", values_to = "marks")
+
+tests_long %>%
+  ggplot(aes(x = marks, colour = test)) +
+  theme_bw() +
+  facet_grid(.~as.factor(test)) +
+  geom_density(show.legend = FALSE)
+```
+
+
+Make a scatter plot of each test mark as a function of the exam grades, with a layer showing a linear model. 
+```{r linear_plots, exercise = TRUE}
+plot_lm <- function(Tnum) {
+  gradebook2 %>%
+    ggplot(aes(x = exam, y = .data[[Tnum]])) +
+    geom_point(size = 0.3) +
+    geom_smooth(method='lm', formula= y~x, linewidth = 0.4) 
+}
+
+( plot_lm("T1") | plot_lm("T2") ) /
+  ( plot_lm("T3") | plot_lm("T4") ) 
+
+```
+
+```{r lm_qs, echo=FALSE}
+question("For which tests does a linear model seem to be appropriate?",
+  answer("T1", correct = TRUE),
+  answer("T2"),
+  answer("T3"),
+  answer("T4"),
+  answer("None"),
+  allow_retry = TRUE,
+  random_answer_order = TRUE,
+  incorrect = "Try again",
+  try_again = "Try again"
+)
+```
